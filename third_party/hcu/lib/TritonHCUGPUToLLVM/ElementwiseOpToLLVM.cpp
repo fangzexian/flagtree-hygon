@@ -88,27 +88,30 @@ Fp16_to_Fp8E5M2_RTZ(Location loc, ConversionPatternRewriter &rewriter,
 //===----------------===//
 static Value
 Fp32_to_Fp8E4M3FN_RTNE_oneValue(Location loc,
-                                ConversionPatternRewriter &rewriter,
-                                Value v) {
+                                ConversionPatternRewriter &rewriter, Value v) {
   // == Step 1: Bitcast to i32 and extract components ==
   Value vi32 = bitcast(v, i32_ty);
   Value sign = trunc(i8_ty, lshr(vi32, i32_val(24))); // get sign << 7
-  sign = and_(i8_ty, sign, i8_val(0x80));                    // keep sign bit
+  sign = and_(i8_ty, sign, i8_val(0x80));             // keep sign bit
 
-  Value abs = and_(i32_ty, vi32, i32_val(0x7FFFFFFF));        // strip sign
+  Value abs = and_(i32_ty, vi32, i32_val(0x7FFFFFFF)); // strip sign
 
   // == Step 2: NaN check ==
-  Value isNaN = and_(i1_ty,
-      icmp_eq(and_(i32_ty, vi32, i32_val(0x7F800000)), i32_val(0x7F800000)),  // exp == 0xFF
-      icmp_ne(and_(i32_ty, vi32, i32_val(0x007FFFFF)), i32_val(0))           // frac != 0
+  Value isNaN = and_(
+      i1_ty,
+      icmp_eq(and_(i32_ty, vi32, i32_val(0x7F800000)),
+              i32_val(0x7F800000)), // exp == 0xFF
+      icmp_ne(and_(i32_ty, vi32, i32_val(0x007FFFFF)), i32_val(0)) // frac != 0
   );
 
   // == Step 3: Rounding (RTNE) ==
   // bias diff = (127 - 7) << 23 = 120 << 23 = 0x3C000000
   // mantissa alignment: keep top 3 mantissa bits => shift right by 23 - 3 = 20
-  constexpr uint32_t baseRoundingBias = (1 << 19) - 1; // 0x7FFFF = round-to-even
+  constexpr uint32_t baseRoundingBias =
+      (1 << 19) - 1; // 0x7FFFF = round-to-even
 
-  Value roundBit = lshr(and_(i32_ty, vi32, i32_val(0x00100000)), i32_val(20)); // bit 20 (for even)
+  Value roundBit = lshr(and_(i32_ty, vi32, i32_val(0x00100000)),
+                        i32_val(20)); // bit 20 (for even)
   Value roundingBias = add(i32_val(baseRoundingBias), roundBit);
   Value vFp8 = add(vi32, roundingBias);
 
@@ -117,11 +120,7 @@ Fp32_to_Fp8E4M3FN_RTNE_oneValue(Location loc,
 
   // == Step 4: Clamp to min normal (smallest FP8 normal in FP32) ==
   // FP32 representation of 2^-6 = 2.0^(-6) = 0x38800000
-  vFp8 = select(
-      icmp_ult(vFp8, i32_val(0x38800000)),
-      i32_val(0x38800000),
-      vFp8
-  );
+  vFp8 = select(icmp_ult(vFp8, i32_val(0x38800000)), i32_val(0x38800000), vFp8);
 
   // == Step 5: Adjust exponent bias ==
   // Subtract (127 - 7) << 23 = 0x3C000000
@@ -132,7 +131,8 @@ Fp32_to_Fp8E4M3FN_RTNE_oneValue(Location loc,
 
   // == Step 6: Clamp to FP8 max value (before inf) ==
   // 0x7E is largest finite E4M3FN value (0.1111.10x)
-  Value isOverflowOrInf = icmp_ugt(abs, i32_val(0x7F7FFFFF)); // > max finite FP32
+  Value isOverflowOrInf =
+      icmp_ugt(abs, i32_val(0x7F7FFFFF)); // > max finite FP32
   vFp8 = select(isOverflowOrInf, i8_val(0x7E), vFp8);
 
   // == Step 7: Handle subnormals via LUT ==
@@ -179,16 +179,17 @@ static Value
 Fp16_to_Fp8E4M3FN_RTNE_oneValue(Location loc,
                                 ConversionPatternRewriter &rewriter, Value v) {
   // StringRef funcName = "llvm.is.fpclass";
-  // Value isNaN = LLVM::createLLVMIntrinsicCallOp(rewriter, loc, funcName, i1_ty,
+  // Value isNaN = LLVM::createLLVMIntrinsicCallOp(rewriter, loc, funcName,
+  // i1_ty,
   //                                               {v, i32_val(0x3)})
   //                   ->getResult(0);
   // Get sign and absolute value
   Value vi16 = bitcast(v, i16_ty);
   Value isNaN = and_(
-    icmp_eq(and_(vi16, i16_val(0x7C00)), i16_val(0x7C00)),  //; exp == 0x7C00
-    icmp_ne(and_(vi16, i16_val(0x03FF)), i16_val(0))        //; frac != 0
-    );
-  
+      icmp_eq(and_(vi16, i16_val(0x7C00)), i16_val(0x7C00)), //; exp == 0x7C00
+      icmp_ne(and_(vi16, i16_val(0x03FF)), i16_val(0))       //; frac != 0
+  );
+
   Value sign = trunc(i8_ty, lshr(and_(vi16, i16_val(0x8000)), i16_val(8)));
   vi16 = and_(vi16, i16_val(0x7FFF));
 
@@ -454,29 +455,30 @@ static Value Fp8E4M3FN_to_Fp32_oneValue(Location loc,
   Value vi8 = bitcast(v, i8_ty);
 
   // Extract sign and absolute value
-  Value sign = and_(vi8, i8_val(0x80));         // 0b1000'0000
-  Value vAbs = and_(vi8, i8_val(0x7F));         // 0b0111'1111
+  Value sign = and_(vi8, i8_val(0x80)); // 0b1000'0000
+  Value vAbs = and_(vi8, i8_val(0x7F)); // 0b0111'1111
 
   // Extract exponent and mantissa
-  Value exp = and_(vAbs, i8_val(0x78));         // 0b0111'1000
-  Value mant = and_(vAbs, i8_val(0x07));        // 0b0000'0111
+  Value exp = and_(vAbs, i8_val(0x78));  // 0b0111'1000
+  Value mant = and_(vAbs, i8_val(0x07)); // 0b0000'0111
 
   // Right shift exponent to LSB
   exp = lshr(exp, i8_val(3));
 
   // Detect special cases
-  Value isZeroOrDenorm = icmp_ult(vAbs, i8_val(0x08));    // < 0b0000'1000
-  Value isNaN = icmp_eq(vAbs, i8_val(0x7F));              // == 0b0111'1111
+  Value isZeroOrDenorm = icmp_ult(vAbs, i8_val(0x08)); // < 0b0000'1000
+  Value isNaN = icmp_eq(vAbs, i8_val(0x7F));           // == 0b0111'1111
 
   // Default normal conversion
   // Compose 32-bit float:
   // sign << 31 | (exp + 120) << 23 | (mant << 20)
-  Value sign32 = shl(zext(i32_ty, sign), i32_val(24));          // move sign to bit 31
-  Value exp32 = shl(zext(i32_ty, exp), i32_val(23));            // move exp to bit 23
-  Value expBias = i32_val(120 << 23);                           // bias diff (127 - 7)
+  Value sign32 = shl(zext(i32_ty, sign), i32_val(24)); // move sign to bit 31
+  Value exp32 = shl(zext(i32_ty, exp), i32_val(23));   // move exp to bit 23
+  Value expBias = i32_val(120 << 23);                  // bias diff (127 - 7)
   exp32 = add(exp32, expBias);
 
-  Value mant32 = shl(zext(i32_ty, mant), i32_val(20));          // move mant to bits 22-20
+  Value mant32 =
+      shl(zext(i32_ty, mant), i32_val(20)); // move mant to bits 22-20
 
   Value combined = or_(or_(sign32, exp32), mant32);
 
@@ -488,11 +490,12 @@ static Value Fp8E4M3FN_to_Fp32_oneValue(Location loc,
   // For vAbs in [0x00 ~ 0x07] → use LUT
   constexpr int lutSize = 8;
   static constexpr uint32_t denormsAndZeroLut[lutSize] = {
-      0x00000000, 0x38800000, 0x39800000, 0x3A000000,
-      0x3A800000, 0x3B000000, 0x3B400000, 0x3B800000};  // approximated FP32 tiny values
+      0x00000000, 0x38800000, 0x39800000, 0x3A000000, 0x3A800000,
+      0x3B000000, 0x3B400000, 0x3B800000}; // approximated FP32 tiny values
 
   for (int i = 0; i < lutSize; ++i) {
-    combined = select(icmp_eq(vAbs, i8_val(i)), i32_val(denormsAndZeroLut[i]), combined);
+    combined = select(icmp_eq(vAbs, i8_val(i)), i32_val(denormsAndZeroLut[i]),
+                      combined);
   }
 
   // Bitcast to float
@@ -508,7 +511,6 @@ static SmallVector<Value> Fp8E4M3FN_to_Fp32(Location loc,
     results[i] = Fp8E4M3FN_to_Fp32_oneValue(loc, rewriter, values[i]);
   return results;
 }
-
 
 static Value Fp8E4M3FN_to_Fp16_oneValue(Location loc,
                                         ConversionPatternRewriter &rewriter,
@@ -1185,7 +1187,7 @@ struct FpToFpOpConversion
              Fp32_to_Fp8E4M3FNUZ},
             {{F32TyID, F8E5M2FNUZTyID, RoundingMode::RTNE},
              Fp32_to_Fp8E5M2FNUZ},
-             {{F32TyID, F8E4M3FNTyID, RoundingMode::RTNE},
+            {{F32TyID, F8E4M3FNTyID, RoundingMode::RTNE},
              Fp32_to_Fp8E4M3FN_RTNE},
             {{F8E4M3FNUZTyID, F32TyID, undefRounding}, Fp8E4M3FNUZ_to_Fp32},
             {{F8E5M2FNUZTyID, F32TyID, undefRounding}, Fp8E5M2FNUZ_to_Fp32},

@@ -115,7 +115,7 @@ public:
     unsigned mDim = 16, kDim = 16;
     unsigned nDim = oldBType.getShape()[1] < 32 ? 16 : 32;
     // if (bGobalOrder[0] == 0) {
-    if (bGobalOrder[0] == 0 || oldBType.getShape()[1] >= 256){
+    if (bGobalOrder[0] == 0 || oldBType.getShape()[1] >= 256) {
       mDim = 16, nDim = 16;
     }
     auto newEnc = ttg::HCUMfmaEncodingAttr::get(
