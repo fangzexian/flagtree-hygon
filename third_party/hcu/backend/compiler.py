@@ -261,7 +261,7 @@ class HIPBackend(BaseBackend):
         ## 3. __HIP_FTZ is default to 1 and not exposed as a kernel argument.
         ##    For now it is used as a controller for developers only.
         __HIP_FTZ = True
-        if (options.num_stages >= 2):
+        if (options.num_stages >= 2) and os.environ.get("TRITON_MOVE_LOAD_TOFRONT_DOT", "0") == "1":
             hcu.passes.ttgpuir.add_move_load_tofront_dot(pm)
             # hcu.passes.ttgpuir.add_control_fa_fwd_bufferload_cnt(pm, 0)
         hcu.passes.ttgpuir.add_to_llvmir(pm, options.arch, __HIP_FTZ)
