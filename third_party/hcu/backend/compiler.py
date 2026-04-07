@@ -38,7 +38,7 @@ class HIPOptions:
     cluster_dims: tuple = (1, 1, 1)
     debug: bool = False
     arch: str = None
-    supported_fp8_dtypes: Tuple[str] = ("fp8e5", )
+    supported_fp8_dtypes: Tuple[str] = ("fp8e5", "fp8e4nv")
     deprecated_fp8_dtypes: Tuple[str] = ()
     default_dot_input_precision: str = "ieee"
     allowed_dot_input_precisions: Tuple[str] = ("ieee", )
